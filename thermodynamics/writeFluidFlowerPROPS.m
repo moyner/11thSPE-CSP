@@ -6,13 +6,15 @@ function writeFluidFlowerPROPS(tab_h2o, tab_co2, tab_sol, varargin)
     % Written by Olav Møyner. Copyright SINTEF AS (2023).
     % SPDX-License-Identifier: MIT
     opts = struct(...
-        'rs', true,        ... % CO2 can dissolve into liquid phase
-        'rv', true,        ... % Water can vaporize into vapor phase
-        'plot', false,     ... % Plot the tables for debugging
-        'dir', '',         ... % Output folder to write files to
-        'units', 'metric', ... % Unit system (si, lab, metric or field)
-        'cap', true,       ... % Ensure that Rs -> 0 as p -> 0
-        'nusat', 5         ... % Number of undersaturated points
+        'rs', true,          ... % CO2 can dissolve into liquid phase
+        'rv', true,          ... % Water can vaporize into vapor phase
+        'plot', false,       ... % Plot the tables for debugging
+        'dir', '',           ... % Output folder to write files to
+        'rhoWS', 998.207150, ... % Brine density at stock tank conditions (kg/m^3)
+        'rhoGS', 1.839345,   ... % Gas density at stock tank conditions (kg/m^3)
+        'units', 'metric',   ... % Unit system (si, lab, metric or field)
+        'cap', true,         ... % Ensure that Rs -> 0 as p -> 0
+        'nusat', 5           ... % Number of undersaturated points
     );
     for i = 1:(numel(varargin)/2)
         key = varargin{2*(i-1)+1};
@@ -93,8 +95,8 @@ function writeFluidFlowerPROPS(tab_h2o, tab_co2, tab_sol, varargin)
         title('Gas density');
     end
     %
-    rhoGS = tab_co2.density_kg_m3_(1);
-    rhoOS = tab_h2o.density_kg_m3_(1);
+    rhoGS = opts.rhoGS; % tab_co2.density_kg_m3_(1);
+    rhoOS = opts.rhoWS; % tab_h2o.density_kg_m3_(1);
 
     % Make sure we don't use the tables beyond this point
     clear tab_h2o tab_co2 tab_sol
