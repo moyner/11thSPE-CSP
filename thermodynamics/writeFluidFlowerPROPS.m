@@ -24,7 +24,7 @@ function writeFluidFlowerPROPS(tab_h2o, tab_co2, tab_sol, varargin)
         opts.(key) = val;
     end
     if opts.unified
-        file_path = fullfile(opts.dir, 'PROPS.txt');
+        file_path = fullfile(opts.dir, 'PVT.inc');
         fn = fopen(file_path, 'w');
         fn_gas = fn;
         fn_oil = fn;
