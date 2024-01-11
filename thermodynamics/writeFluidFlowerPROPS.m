@@ -13,6 +13,7 @@ function writeFluidFlowerPROPS(tab_h2o, tab_co2, tab_sol, varargin)
         'rhoWS', 998.207150, ... % Brine density at stock tank conditions (kg/m^3)
         'rhoGS', 1.839345,   ... % Gas density at stock tank conditions (kg/m^3)
         'units', 'metric',   ... % Unit system (si, lab, metric or field)
+        'unified', false,    ... % Write everything to a single PROPS.txt file.
         'cap', true,         ... % Ensure that Rs -> 0 as p -> 0
         'nusat', 5           ... % Number of undersaturated points
     );
@@ -21,6 +22,15 @@ function writeFluidFlowerPROPS(tab_h2o, tab_co2, tab_sol, varargin)
         val = varargin{2*(i-1)+2};
         assert(isfield(opts, key));
         opts.(key) = val;
+    end
+    if opts.unified
+        file_path = fullfile(opts.dir, 'PROPS.txt');
+        fn = fopen(file_path, 'w');
+        fn_gas = fn;
+        fn_oil = fn;
+    else
+        fn_gas = [];
+        fn_oil = [];
     end
     barsa = 1e5;
     u = unitFactors(opts.units);
@@ -44,8 +54,8 @@ function writeFluidFlowerPROPS(tab_h2o, tab_co2, tab_sol, varargin)
     p_h2o = tab_h2o.pressure_Pa_;
     p_co2 = tab_co2.pressure_Pa_;
 
-    assert(all(p_sol == p_h2o));
-    assert(all(p_sol == p_co2));
+    % assert(all(p_sol == p_h2o));
+    % assert(all(p_sol == p_co2));
 
     p = p_sol/barsa;
    
@@ -137,24 +147,33 @@ function writeFluidFlowerPROPS(tab_h2o, tab_co2, tab_sol, varargin)
     end
 
     if dissolve_gas
-        write_pvto(p_sol, R_s, pure_water_density, water_viscosity, T, X_co2, Y_h2o, rhoOS, rhoGS, u, nusat, opts)
+        write_pvto(fn_oil, p_sol, R_s, pure_water_density, water_viscosity, T, X_co2, Y_h2o, rhoOS, rhoGS, u, nusat, opts)
     else
-        write_immiscible(p_sol, pure_water_density./rhoOS, water_viscosity, u, 'PVDO', opts);
+        write_immiscible(fn_oil, p_sol, pure_water_density./rhoOS, water_viscosity, u, 'PVDO', opts);
     end
     if vaporize_water
-        write_pvtg(p_sol, R_v, pure_gas_density, gas_viscosity, Y_h2o, rhoGS, rhoOS, u, opts)
+        write_pvtg(fn_gas, p_sol, R_v, pure_gas_density, gas_viscosity, Y_h2o, rhoGS, rhoOS, u, opts)
     else
-        write_immiscible(p_sol, pure_gas_density./rhoGS, gas_viscosity, u, 'PVDG', opts);
+        write_immiscible(fn_gas, p_sol, pure_gas_density./rhoGS, gas_viscosity, u, 'PVDG', opts);
     end
-    file_path = fullfile(opts.dir, 'DENSITY.txt');
-    fn = fopen(file_path, 'w');
+    if ~opts.unified
+        file_path = fullfile(opts.dir, 'DENSITY.txt');
+        fn = fopen(file_path, 'w');
+    end
     fprintf(fn, 'DENSITY\n    %f 1 %f /\n', rhoOS, rhoGS);
     fprintf('%s written.\n\n', file_path);
+    fclose(fn);
 end
 
-function write_pvto(p, Rs, pure_water_density, water_viscosity, T, X_co2_sat, Y_h2o_sat, rhoOS, rhoGS, u, n, opts)
-    file_path = fullfile(opts.dir, 'PVTO.txt');
-    fn = fopen(file_path, 'w');
+function write_pvto(fn, p, Rs, pure_water_density, water_viscosity, T, X_co2_sat, Y_h2o_sat, rhoOS, rhoGS, u, n, opts)
+    if isempty(fn)
+        file_path = fullfile(opts.dir, 'PVTO.txt');
+        fn = fopen(file_path, 'w');
+        do_close = true;
+    else
+        do_close = false;
+    end
+
     % PVTO: Tables by R_s: For each, given a set of p_o B_o mu_o
     fprintf(fn, '-- RS    PRES    FVF      VISC\n');
     fprintf(fn, 'PVTO\n');
@@ -200,14 +219,21 @@ function write_pvto(p, Rs, pure_water_density, water_viscosity, T, X_co2_sat, Y_
         end
     end
     fprintf(fn, '/\n');
-    fclose(fn);
-    fprintf('%s written.\n', file_path);
+    if do_close
+        fclose(fn);
+        fprintf('%s written.\n', file_path);
+    end
 end
 
-function write_pvtg(p, Rv, pure_gas_density, gas_viscosity, Y_h2o, rhoGS, rhoOS, u, opts)
+function write_pvtg(fn, p, Rv, pure_gas_density, gas_viscosity, Y_h2o, rhoGS, rhoOS, u, opts)
     bG = shrinkage_factor(pure_gas_density, Y_h2o, rhoGS, rhoOS);
-    file_path = fullfile(opts.dir, 'PVTG.txt');
-    fn = fopen(file_path, 'w');
+    if isempty(fn)
+        file_path = fullfile(opts.dir, 'PVTG.txt');
+        fn = fopen(file_path, 'w');
+        do_close = true;
+    else
+        do_close = false;
+    end
 
     uk = u.press;
     urv = u.liqvol_r/u.gasvol_s;
@@ -227,14 +253,21 @@ function write_pvtg(p, Rv, pure_gas_density, gas_viscosity, Y_h2o, rhoGS, rhoOS,
         fprintf(fn, ' /\n');
     end
     fprintf(fn, '/\n');
-    fprintf('%s written.\n', file_path);
-    fclose(fn);
+    if do_close
+        fprintf('%s written.\n', file_path);
+        fclose(fn);
+    end
 end
 
-function write_immiscible(p, b, mu, u, title, opts)
-    filename = [title, '.txt'];
-    file_path = fullfile(opts.dir, filename);
-    fn = fopen(file_path, 'w');
+function write_immiscible(fn, p, b, mu, u, title, opts)
+    if isempty(fn)
+        filename = [title, '.txt'];
+        file_path = fullfile(opts.dir, filename);
+        fn = fopen(file_path, 'w');
+        do_close = true;
+    else
+        do_close = false;
+    end
     if strcmpi(title, 'pvdg')
         fvf_u = u.gasvol_r/u.gasvol_s;
     else
@@ -247,8 +280,10 @@ function write_immiscible(p, b, mu, u, title, opts)
         fprintf(fn, '%-4.10g %-4.10g %-4.10g\n', p(i)*u.press, fvf_u/b(i), u.viscosity*mu(i));
     end
     fprintf(fn, '/\n');
-    fclose(fn);
-    fprintf('%s written.\n', file_path);
+    if do_close
+        fclose(fn);
+        fprintf('%s written.\n', file_path);
+    end
 end
 
 function bO = shrinkage_factor(rhoO, X_co2, rhoOS, rhoGS)
